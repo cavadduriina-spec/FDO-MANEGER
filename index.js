@@ -3,31 +3,29 @@ const {
   GatewayIntentBits,
   SlashCommandBuilder,
   REST,
-  Routes
+  Routes,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder
 } = require('discord.js');
 
 const fs = require('fs');
 
 const TOKEN = process.env.TOKEN;
 
-// 🔧 CONFIG
 const CLIENT_ID = "1496610756404183070";
 const GUILD_ID = "1496119913000206447";
 
-const CANALE_DENUNCE = "1496781775849000970";
-const CANALE_ARRESTI = "1496787661854212156";
-const CANALE_PDA = "1496616270265581641";
+// SOLO QUESTO SERVE
+const CANALE_DENUNCE = "1496787661854212156";
 
 const STAFF_ROLES = ["1496122762354229299", "1496613807953416202"];
 
-// DATABASE
 const DB_FILE = "./database.json";
-let data = {};
-
-if (fs.existsSync(DB_FILE)) {
-  const raw = fs.readFileSync(DB_FILE);
-  data = raw.length ? JSON.parse(raw) : { persone: {} };
-}
+let data = fs.existsSync(DB_FILE)
+  ? JSON.parse(fs.readFileSync(DB_FILE) || "{}")
+  : { persone: {} };
 
 function save() {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
@@ -49,36 +47,58 @@ function isStaff(member) {
   return member.roles.cache.some(r => STAFF_ROLES.includes(r.id));
 }
 
-function calcTempo(scadenza) {
-  const now = new Date();
-  const scad = new Date(scadenza);
-  const diff = scad - now;
-  const giorni = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-  if (giorni > 0) return `Scade tra ${giorni} giorni`;
-  if (giorni === 0) return `Scade oggi`;
-  return `Scaduto da ${Math.abs(giorni)} giorni`;
-}
-
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-client.once("ready", () => {
-  console.log("Bot online");
-});
+client.once("ready", () => console.log("ONLINE"));
 
 client.on("interactionCreate", async interaction => {
 
-  if (!interaction.isChatInputCommand()) return;
+  // ===== MODULO DENUNCIA =====
+  if (interaction.isChatInputCommand() && interaction.commandName === "denuncia") {
 
-  // 📄 DENUNCIA
-  if (interaction.commandName === "denuncia") {
+    const modal = new ModalBuilder()
+      .setCustomId("modal_denuncia")
+      .setTitle("Modulo Denuncia");
 
-    const esponente = interaction.options.getString("esponente");
-    const imputato = interaction.options.getString("imputato");
-    const nascita = interaction.options.getString("nascita");
-    const reato = interaction.options.getString("reato");
+    const esponente = new TextInputBuilder()
+      .setCustomId("esponente")
+      .setLabel("Nome esponente")
+      .setStyle(TextInputStyle.Short);
+
+    const imputato = new TextInputBuilder()
+      .setCustomId("imputato")
+      .setLabel("Nome imputato")
+      .setStyle(TextInputStyle.Short);
+
+    const nascita = new TextInputBuilder()
+      .setCustomId("nascita")
+      .setLabel("Data nascita imputato")
+      .setStyle(TextInputStyle.Short);
+
+    const reato = new TextInputBuilder()
+      .setCustomId("reato")
+      .setLabel("Reato")
+      .setStyle(TextInputStyle.Paragraph);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(esponente),
+      new ActionRowBuilder().addComponents(imputato),
+      new ActionRowBuilder().addComponents(nascita),
+      new ActionRowBuilder().addComponents(reato)
+    );
+
+    return interaction.showModal(modal);
+  }
+
+  // ===== INVIO DENUNCIA =====
+  if (interaction.isModalSubmit() && interaction.customId === "modal_denuncia") {
+
+    const esponente = interaction.fields.getTextInputValue("esponente");
+    const imputato = interaction.fields.getTextInputValue("imputato");
+    const nascita = interaction.fields.getTextInputValue("nascita");
+    const reato = interaction.fields.getTextInputValue("reato");
 
     const persona = getPersona(imputato);
 
@@ -95,7 +115,7 @@ client.on("interactionCreate", async interaction => {
     const canale = await client.channels.fetch(CANALE_DENUNCE);
 
     canale.send(`
-NUOVA DENUNCIA
+DENUNCIA
 
 ID: ${denuncia.id}
 Esponente: ${esponente}
@@ -107,67 +127,49 @@ Reato: ${reato}
     return interaction.reply({ content: "Denuncia inviata", ephemeral: true });
   }
 
-  // 🚔 ARRESTO
+  // ===== ARRESTO =====
   if (interaction.commandName === "arresto") {
 
     const nome = interaction.options.getString("nome");
     const reati = interaction.options.getString("reati");
     const multa = interaction.options.getInteger("multa");
     const mesi = interaction.options.getInteger("mesi");
+    const sequestrati = interaction.options.getString("sequestrati");
+    const consegnati = interaction.options.getString("consegnati");
     const foto = interaction.options.getAttachment("foto");
 
     const persona = getPersona(nome);
 
     const arresto = {
       id: Date.now(),
+      agente: interaction.user.username,
       reati,
       multa,
       mesi,
+      sequestrati,
+      consegnati,
       foto: foto.url
     };
 
     persona.arresti.push(arresto);
     save();
 
-    const canale = await client.channels.fetch(CANALE_ARRESTI);
-
-    canale.send(`
-NUOVO ARRESTO
+    return interaction.reply(`
+ARRESTO REGISTRATO
 
 ID: ${arresto.id}
-Nome: ${nome}
+Agente: ${arresto.agente}
+
 Reati: ${reati}
 Multa: ${multa}
 Mesi: ${mesi}
-Foto: ${foto.url}
+
+Sequestrati: ${sequestrati}
+Consegnati: ${consegnati}
 `);
-
-    return interaction.reply(`Arresto registrato ID: ${arresto.id}`);
   }
 
-  // ✏️ EDIT ARRESTO (STAFF)
-  if (interaction.commandName === "edit_arresto") {
-
-    if (!isStaff(interaction.member))
-      return interaction.reply({ content: "Non hai permessi", ephemeral: true });
-
-    const nome = interaction.options.getString("nome");
-    const id = interaction.options.getString("id");
-    const nuovaMulta = interaction.options.getInteger("multa");
-
-    const persona = data.persone[nome];
-    if (!persona) return interaction.reply("Persona non trovata");
-
-    const arresto = persona.arresti.find(a => a.id == id);
-    if (!arresto) return interaction.reply("Arresto non trovato");
-
-    arresto.multa = nuovaMulta;
-    save();
-
-    return interaction.reply("Arresto modificato");
-  }
-
-  // 🔫 PDA RILASCIO
+  // ===== PDA =====
   if (interaction.commandName === "pda_rilascio") {
 
     const nome = interaction.options.getString("nome");
@@ -177,45 +179,41 @@ Foto: ${foto.url}
     const persona = getPersona(nome);
 
     persona.pda = {
+      id: Date.now(),
       scadenza,
       foto: foto.url
     };
 
     save();
 
-    const canale = await client.channels.fetch(CANALE_PDA);
+    return interaction.reply(`
+PDA REGISTRATO
 
-    canale.send(`
-PDA RILASCIATO
-
+ID: ${persona.pda.id}
 Nome: ${nome}
 Scadenza: ${scadenza}
-Foto: ${foto.url}
 `);
-
-    return interaction.reply("PDA registrato");
   }
 
-  // ✏️ EDIT PDA (STAFF)
-  if (interaction.commandName === "edit_pda") {
+  // ===== TOGLI DENUNCIA =====
+  if (interaction.commandName === "togli_denuncia") {
 
     if (!isStaff(interaction.member))
-      return interaction.reply({ content: "Non hai permessi", ephemeral: true });
+      return interaction.reply({ content: "No permessi", ephemeral: true });
 
     const nome = interaction.options.getString("nome");
-    const nuovaScadenza = interaction.options.getString("scadenza");
+    const id = interaction.options.getString("id");
 
     const persona = data.persone[nome];
-    if (!persona || !persona.pda)
-      return interaction.reply("PDA non trovato");
+    if (!persona) return interaction.reply("Persona non trovata");
 
-    persona.pda.scadenza = nuovaScadenza;
+    persona.denunce = persona.denunce.filter(d => d.id != id);
     save();
 
-    return interaction.reply("PDA modificato");
+    return interaction.reply("Denuncia rimossa");
   }
 
-  // ℹ️ INFO
+  // ===== INFO =====
   if (interaction.commandName === "info") {
 
     const nome = interaction.options.getString("nome");
@@ -224,76 +222,25 @@ Foto: ${foto.url}
     if (!persona)
       return interaction.reply("Persona non trovata");
 
-    let stato = "Non ha PDA";
-    if (persona.pda)
-      stato = calcTempo(persona.pda.scadenza);
+    let fedina = "Fedina pulita";
+
+    if (persona.arresti.length > 0) {
+      const a = persona.arresti.at(-1);
+      fedina = `Arrestato da ${a.agente} per ${a.reati}`;
+    }
 
     return interaction.reply(`
+INFO
+
 Nome: ${nome}
+
+${fedina}
 
 Denunce: ${persona.denunce.length}
 Arresti: ${persona.arresti.length}
 
-PDA: ${stato}
+PDA: ${persona.pda ? "Presente" : "Assente"}
 `);
   }
 
 });
-
-// SLASH COMMANDS
-const commands = [
-
-  new SlashCommandBuilder()
-    .setName("denuncia")
-    .setDescription("Fai denuncia")
-    .addStringOption(o => o.setName("esponente").setDescription("Nome").setRequired(true))
-    .addStringOption(o => o.setName("imputato").setDescription("Nome").setRequired(true))
-    .addStringOption(o => o.setName("nascita").setDescription("Data nascita").setRequired(true))
-    .addStringOption(o => o.setName("reato").setDescription("Reato").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("arresto")
-    .setDescription("Fai arresto")
-    .addStringOption(o => o.setName("nome").setDescription("Nome").setRequired(true))
-    .addStringOption(o => o.setName("reati").setDescription("Reati").setRequired(true))
-    .addIntegerOption(o => o.setName("multa").setDescription("Multa").setRequired(true))
-    .addIntegerOption(o => o.setName("mesi").setDescription("Mesi").setRequired(true))
-    .addAttachmentOption(o => o.setName("foto").setDescription("Foto").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("edit_arresto")
-    .setDescription("Modifica arresto")
-    .addStringOption(o => o.setName("nome").setDescription("Nome").setRequired(true))
-    .addStringOption(o => o.setName("id").setDescription("ID arresto").setRequired(true))
-    .addIntegerOption(o => o.setName("multa").setDescription("Nuova multa").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("pda_rilascio")
-    .setDescription("Rilascia PDA")
-    .addStringOption(o => o.setName("nome").setDescription("Nome").setRequired(true))
-    .addStringOption(o => o.setName("scadenza").setDescription("YYYY-MM-DD").setRequired(true))
-    .addAttachmentOption(o => o.setName("foto").setDescription("Foto").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("edit_pda")
-    .setDescription("Modifica PDA")
-    .addStringOption(o => o.setName("nome").setDescription("Nome").setRequired(true))
-    .addStringOption(o => o.setName("scadenza").setDescription("Nuova scadenza").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("info")
-    .setDescription("Info persona")
-    .addStringOption(o => o.setName("nome").setDescription("Nome RP").setRequired(true))
-
-];
-
-const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-(async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-})();
-
-client.login(TOKEN);
