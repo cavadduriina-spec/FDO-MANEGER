@@ -21,7 +21,7 @@ const CLIENT_ID = "1496610756404183070";
 const GUILD_ID = "1496119913000206447";
 const CANALE_DENUNCE = "1496787661854212156";
 
-/* ===== DATABASE ===== */
+/* DATABASE */
 function loadDB() {
   return JSON.parse(fs.readFileSync("database.json"));
 }
@@ -30,25 +30,31 @@ function saveDB(data) {
   fs.writeFileSync("database.json", JSON.stringify(data, null, 2));
 }
 
-function getPersona(db, nome) {
-  if (!db[nome]) {
-    db[nome] = {
+function getKey(nome, nascita) {
+  return `${nome}|${nascita}`;
+}
+
+function getPersona(db, key) {
+  if (!db[key]) {
+    db[key] = {
+      nome: key.split("|")[0],
+      nascita: key.split("|")[1],
       denunce: [],
       arresti: [],
       pda: null
     };
   }
-  return db[nome];
+  return db[key];
 }
 
-/* ===== BOT ===== */
+/* BOT */
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-client.once("ready", () => console.log("BOT ONLINE"));
+client.once("clientReady", () => console.log("BOT ONLINE"));
 
-/* ===== INTERAZIONI ===== */
+/* INTERAZIONI */
 client.on("interactionCreate", async interaction => {
   try {
 
@@ -100,29 +106,27 @@ client.on("interactionCreate", async interaction => {
       const reato = interaction.fields.getTextInputValue("reato");
 
       const db = loadDB();
-      const persona = getPersona(db, imputato);
+      const key = getKey(imputato, nascita);
+      const persona = getPersona(db, key);
 
       const id = db._global.id++;
 
-      persona.denunce.push({
-        id,
-        esponente,
-        nascita,
-        reato
-      });
+      persona.denunce.push({ id, esponente, reato });
 
       saveDB(db);
 
       const canale = await client.channels.fetch(CANALE_DENUNCE);
 
-      await canale.send(`
-DENUNCIA ID: ${id}
+      const embed = new EmbedBuilder()
+        .setTitle(`Denuncia ID ${id}`)
+        .addFields(
+          { name: "Imputato", value: imputato },
+          { name: "Nascita", value: nascita },
+          { name: "Reato", value: reato },
+          { name: "Esponente", value: esponente }
+        );
 
-Esponente: ${esponente}
-Imputato: ${imputato}
-Nascita: ${nascita}
-Reato: ${reato}
-`);
+      await canale.send({ embeds: [embed] });
 
       return interaction.editReply("Denuncia inviata");
     }
@@ -133,12 +137,17 @@ Reato: ${reato}
       await interaction.deferReply();
 
       const nome = interaction.options.getString("nome");
+      const nascita = interaction.options.getString("nascita");
       const reati = interaction.options.getString("reati");
       const mesi = interaction.options.getInteger("mesi");
       const multa = interaction.options.getInteger("multa");
+      const sequestrati = interaction.options.getString("sequestrati");
+      const consegnati = interaction.options.getString("consegnati");
+      const foto = interaction.options.getString("foto");
 
       const db = loadDB();
-      const persona = getPersona(db, nome);
+      const key = getKey(nome, nascita);
+      const persona = getPersona(db, key);
 
       const id = db._global.id++;
 
@@ -147,88 +156,28 @@ Reato: ${reato}
         agente: interaction.user.tag,
         reati,
         mesi,
-        multa
+        multa,
+        sequestrati,
+        consegnati,
+        foto
       });
 
       saveDB(db);
 
-      return interaction.editReply(`Arresto registrato ID: ${id}`);
-    }
+      const embed = new EmbedBuilder()
+        .setTitle(`Arresto ID ${id}`)
+        .addFields(
+          { name: "Nome", value: nome },
+          { name: "Nascita", value: nascita },
+          { name: "Reati", value: reati },
+          { name: "Mesi", value: mesi.toString() },
+          { name: "Multa", value: multa.toString() },
+          { name: "Sequestrati", value: sequestrati || "Nessuno" },
+          { name: "Consegnati", value: consegnati || "Nessuno" }
+        )
+        .setImage(foto || null);
 
-    /* ===== EDIT ARRESTO ===== */
-    if (interaction.commandName === "edit_arresto") {
-
-      await interaction.deferReply();
-
-      const id = interaction.options.getInteger("id");
-      const reati = interaction.options.getString("reati");
-      const mesi = interaction.options.getInteger("mesi");
-      const multa = interaction.options.getInteger("multa");
-
-      const db = loadDB();
-
-      for (const nome in db) {
-        if (nome === "_global") continue;
-
-        const arresto = db[nome].arresti.find(a => a.id === id);
-
-        if (arresto) {
-          if (reati) arresto.reati = reati;
-          if (mesi) arresto.mesi = mesi;
-          if (multa) arresto.multa = multa;
-
-          saveDB(db);
-          return interaction.editReply("Arresto modificato");
-        }
-      }
-
-      return interaction.editReply("ID non trovato");
-    }
-
-    /* ===== PDA ===== */
-    if (interaction.commandName === "pda_rilascio") {
-
-      await interaction.deferReply();
-
-      const nome = interaction.options.getString("nome");
-      const scadenza = interaction.options.getString("scadenza");
-
-      const db = loadDB();
-      const persona = getPersona(db, nome);
-
-      const id = db._global.id++;
-
-      persona.pda = {
-        id,
-        scadenza
-      };
-
-      saveDB(db);
-
-      return interaction.editReply(`PDA rilasciato ID: ${id}`);
-    }
-
-    /* ===== EDIT PDA ===== */
-    if (interaction.commandName === "edit_pda") {
-
-      await interaction.deferReply();
-
-      const id = interaction.options.getInteger("id");
-      const scadenza = interaction.options.getString("scadenza");
-
-      const db = loadDB();
-
-      for (const nome in db) {
-        if (nome === "_global") continue;
-
-        if (db[nome].pda && db[nome].pda.id === id) {
-          db[nome].pda.scadenza = scadenza;
-          saveDB(db);
-          return interaction.editReply("PDA modificato");
-        }
-      }
-
-      return interaction.editReply("ID non trovato");
+      return interaction.editReply({ embeds: [embed] });
     }
 
     /* ===== INFO ===== */
@@ -237,37 +186,39 @@ Reato: ${reato}
       await interaction.deferReply();
 
       const nome = interaction.options.getString("nome");
-      const db = loadDB();
+      const nascita = interaction.options.getString("nascita");
 
-      if (!db[nome]) {
-        return interaction.editReply("Nessun dato");
+      const db = loadDB();
+      const key = getKey(nome, nascita);
+
+      if (!db[key]) {
+        return interaction.editReply("Nessun dato trovato");
       }
 
-      const persona = db[nome];
+      const p = db[key];
 
-      let fedina = "Fedina pulita";
+      let fedina = "Pulita";
       let dettaglio = "";
 
-      if (persona.arresti.length > 0) {
-        const ultimo = persona.arresti.at(-1);
-        fedina = "Fedina sporca";
-        dettaglio = `\nArrestato da ${ultimo.agente} per ${ultimo.reati}`;
+      if (p.arresti.length > 0) {
+        const ultimo = p.arresti.at(-1);
+        fedina = "Sporca";
+        dettaglio = `Arrestato per: ${ultimo.reati}`;
       }
 
-      return interaction.editReply(`
-INFO
+      const embed = new EmbedBuilder()
+        .setTitle("Info Persona")
+        .addFields(
+          { name: "Nome", value: p.nome },
+          { name: "Nascita", value: p.nascita },
+          { name: "Fedina", value: fedina },
+          { name: "Dettaglio", value: dettaglio || "Nessuno" },
+          { name: "Denunce", value: p.denunce.length.toString() },
+          { name: "Arresti", value: p.arresti.length.toString() },
+          { name: "PDA", value: p.pda ? "SI" : "NO" }
+        );
 
-Nome: ${nome}
-
-${fedina}
-${dettaglio}
-
-Denunce: ${persona.denunce.length}
-Arresti: ${persona.arresti.length}
-
-PDA: ${persona.pda ? "SI" : "NO"}
-${persona.pda ? `Scadenza: ${persona.pda.scadenza}` : ""}
-`);
+      return interaction.editReply({ embeds: [embed] });
     }
 
   } catch (err) {
@@ -276,41 +227,26 @@ ${persona.pda ? `Scadenza: ${persona.pda.scadenza}` : ""}
   }
 });
 
-/* ===== COMANDI ===== */
+/* COMANDI */
 const commands = [
 
   new SlashCommandBuilder()
     .setName("arresto")
-    .setDescription("Registra arresto")
+    .setDescription("Arresto")
     .addStringOption(o => o.setName("nome").setDescription("Nome").setRequired(true))
+    .addStringOption(o => o.setName("nascita").setDescription("Nascita").setRequired(true))
     .addStringOption(o => o.setName("reati").setDescription("Reati").setRequired(true))
     .addIntegerOption(o => o.setName("mesi").setDescription("Mesi").setRequired(true))
-    .addIntegerOption(o => o.setName("multa").setDescription("Multa").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("edit_arresto")
-    .setDescription("Modifica arresto")
-    .addIntegerOption(o => o.setName("id").setDescription("ID").setRequired(true))
-    .addStringOption(o => o.setName("reati").setDescription("Nuovi reati"))
-    .addIntegerOption(o => o.setName("mesi").setDescription("Nuovi mesi"))
-    .addIntegerOption(o => o.setName("multa").setDescription("Nuova multa")),
-
-  new SlashCommandBuilder()
-    .setName("pda_rilascio")
-    .setDescription("Rilascia PDA")
-    .addStringOption(o => o.setName("nome").setDescription("Nome").setRequired(true))
-    .addStringOption(o => o.setName("scadenza").setDescription("Scadenza").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("edit_pda")
-    .setDescription("Modifica PDA")
-    .addIntegerOption(o => o.setName("id").setDescription("ID").setRequired(true))
-    .addStringOption(o => o.setName("scadenza").setDescription("Nuova scadenza")),
+    .addIntegerOption(o => o.setName("multa").setDescription("Multa").setRequired(true))
+    .addStringOption(o => o.setName("sequestrati").setDescription("Oggetti sequestrati"))
+    .addStringOption(o => o.setName("consegnati").setDescription("Oggetti consegnati"))
+    .addStringOption(o => o.setName("foto").setDescription("Link foto")),
 
   new SlashCommandBuilder()
     .setName("info")
     .setDescription("Info persona")
     .addStringOption(o => o.setName("nome").setDescription("Nome").setRequired(true))
+    .addStringOption(o => o.setName("nascita").setDescription("Nascita").setRequired(true))
 
 ];
 
@@ -322,9 +258,8 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
   });
 })();
 
-/* ===== BOTTONE DENUNCIA ===== */
-client.once("ready", async () => {
-
+/* BOTTONE */
+client.once("clientReady", async () => {
   const channel = await client.channels.fetch(CANALE_DENUNCE);
 
   const button = new ButtonBuilder()
@@ -336,10 +271,9 @@ client.once("ready", async () => {
   const row = new ActionRowBuilder().addComponents(button);
 
   channel.send({
-    content: "Premi il bottone per fare una denuncia",
+    content: "Clicca per fare una denuncia",
     components: [row]
   });
-
 });
 
 client.login(TOKEN);
