@@ -58,167 +58,185 @@ client.once("clientReady", () => console.log("BOT ONLINE"));
 client.on("interactionCreate", async interaction => {
   try {
 
-    /* ===== BOTTONE DENUNCIA ===== */
-    if (interaction.isButton() && interaction.customId === "denuncia_btn") {
+    /* ================= BOTTONI ================= */
+    if (interaction.isButton()) {
 
-      const modal = new ModalBuilder()
-        .setCustomId("denuncia_modal")
-        .setTitle("Denuncia");
+      if (interaction.customId === "denuncia_btn") {
 
-      const esponente = new TextInputBuilder()
-        .setCustomId("esponente")
-        .setLabel("Nome esponente")
-        .setStyle(TextInputStyle.Short);
+        const modal = new ModalBuilder()
+          .setCustomId("denuncia_modal")
+          .setTitle("Denuncia");
 
-      const imputato = new TextInputBuilder()
-        .setCustomId("imputato")
-        .setLabel("Nome imputato")
-        .setStyle(TextInputStyle.Short);
+        const esponente = new TextInputBuilder()
+          .setCustomId("esponente")
+          .setLabel("Nome esponente")
+          .setRequired(true)
+          .setStyle(TextInputStyle.Short);
 
-      const nascita = new TextInputBuilder()
-        .setCustomId("nascita")
-        .setLabel("Data nascita imputato")
-        .setStyle(TextInputStyle.Short);
+        const imputato = new TextInputBuilder()
+          .setCustomId("imputato")
+          .setLabel("Nome imputato")
+          .setRequired(true)
+          .setStyle(TextInputStyle.Short);
 
-      const reato = new TextInputBuilder()
-        .setCustomId("reato")
-        .setLabel("Reato")
-        .setStyle(TextInputStyle.Paragraph);
+        const nascita = new TextInputBuilder()
+          .setCustomId("nascita")
+          .setLabel("Data nascita imputato")
+          .setRequired(true)
+          .setStyle(TextInputStyle.Short);
 
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(esponente),
-        new ActionRowBuilder().addComponents(imputato),
-        new ActionRowBuilder().addComponents(nascita),
-        new ActionRowBuilder().addComponents(reato)
-      );
+        const reato = new TextInputBuilder()
+          .setCustomId("reato")
+          .setLabel("Reato")
+          .setRequired(true)
+          .setStyle(TextInputStyle.Paragraph);
 
-      return interaction.showModal(modal);
-    }
-
-    /* ===== INVIO DENUNCIA ===== */
-    if (interaction.isModalSubmit() && interaction.customId === "denuncia_modal") {
-
-      await interaction.deferReply({ ephemeral: true });
-
-      const esponente = interaction.fields.getTextInputValue("esponente");
-      const imputato = interaction.fields.getTextInputValue("imputato");
-      const nascita = interaction.fields.getTextInputValue("nascita");
-      const reato = interaction.fields.getTextInputValue("reato");
-
-      const db = loadDB();
-      const key = getKey(imputato, nascita);
-      const persona = getPersona(db, key);
-
-      const id = db._global.id++;
-
-      persona.denunce.push({ id, esponente, reato });
-
-      saveDB(db);
-
-      const canale = await client.channels.fetch(CANALE_DENUNCE);
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Denuncia ID ${id}`)
-        .addFields(
-          { name: "Imputato", value: imputato },
-          { name: "Nascita", value: nascita },
-          { name: "Reato", value: reato },
-          { name: "Esponente", value: esponente }
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(esponente),
+          new ActionRowBuilder().addComponents(imputato),
+          new ActionRowBuilder().addComponents(nascita),
+          new ActionRowBuilder().addComponents(reato)
         );
 
-      await canale.send({ embeds: [embed] });
-
-      return interaction.editReply("Denuncia inviata");
-    }
-
-    /* ===== ARRESTO ===== */
-    if (interaction.isChatInputCommand() && interaction.commandName === "arresto") {
-
-      await interaction.deferReply();
-
-      const nome = interaction.options.getString("nome");
-      const nascita = interaction.options.getString("nascita");
-      const reati = interaction.options.getString("reati");
-      const mesi = interaction.options.getInteger("mesi");
-      const multa = interaction.options.getInteger("multa");
-      const sequestrati = interaction.options.getString("sequestrati");
-      const consegnati = interaction.options.getString("consegnati");
-      const foto = interaction.options.getString("foto");
-
-      const db = loadDB();
-      const key = getKey(nome, nascita);
-      const persona = getPersona(db, key);
-
-      const id = db._global.id++;
-
-      persona.arresti.push({
-        id,
-        agente: interaction.user.tag,
-        reati,
-        mesi,
-        multa,
-        sequestrati,
-        consegnati,
-        foto
-      });
-
-      saveDB(db);
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Arresto ID ${id}`)
-        .addFields(
-          { name: "Nome", value: nome },
-          { name: "Nascita", value: nascita },
-          { name: "Reati", value: reati },
-          { name: "Mesi", value: mesi.toString() },
-          { name: "Multa", value: multa.toString() },
-          { name: "Sequestrati", value: sequestrati || "Nessuno" },
-          { name: "Consegnati", value: consegnati || "Nessuno" }
-        )
-        .setImage(foto || null);
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    /* ===== INFO ===== */
-    if (interaction.commandName === "info") {
-
-      await interaction.deferReply();
-
-      const nome = interaction.options.getString("nome");
-      const nascita = interaction.options.getString("nascita");
-
-      const db = loadDB();
-      const key = getKey(nome, nascita);
-
-      if (!db[key]) {
-        return interaction.editReply("Nessun dato trovato");
+        return interaction.showModal(modal);
       }
 
-      const p = db[key];
+      return;
+    }
 
-      let fedina = "Pulita";
-      let dettaglio = "";
+    /* ================= MODAL ================= */
+    if (interaction.isModalSubmit()) {
 
-      if (p.arresti.length > 0) {
-        const ultimo = p.arresti.at(-1);
-        fedina = "Sporca";
-        dettaglio = `Arrestato per: ${ultimo.reati}`;
+      if (interaction.customId === "denuncia_modal") {
+
+        const esponente = interaction.fields.getTextInputValue("esponente");
+        const imputato = interaction.fields.getTextInputValue("imputato");
+        const nascita = interaction.fields.getTextInputValue("nascita");
+        const reato = interaction.fields.getTextInputValue("reato");
+
+        const db = loadDB();
+        const key = getKey(imputato, nascita);
+        const persona = getPersona(db, key);
+
+        const id = db._global.id++;
+
+        persona.denunce.push({ id, esponente, reato });
+
+        saveDB(db);
+
+        const canale = await client.channels.fetch(CANALE_DENUNCE);
+
+        const embed = new EmbedBuilder()
+          .setTitle(`DENUNCIA ID ${id}`)
+          .addFields(
+            { name: "Imputato", value: imputato },
+            { name: "Nascita", value: nascita },
+            { name: "Reato", value: reato },
+            { name: "Esponente", value: esponente }
+          );
+
+        await canale.send({ embeds: [embed] });
+
+        return interaction.reply({ content: "Denuncia inviata", ephemeral: true });
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle("Info Persona")
-        .addFields(
-          { name: "Nome", value: p.nome },
-          { name: "Nascita", value: p.nascita },
-          { name: "Fedina", value: fedina },
-          { name: "Dettaglio", value: dettaglio || "Nessuno" },
-          { name: "Denunce", value: p.denunce.length.toString() },
-          { name: "Arresti", value: p.arresti.length.toString() },
-          { name: "PDA", value: p.pda ? "SI" : "NO" }
-        );
+      return;
+    }
 
-      return interaction.editReply({ embeds: [embed] });
+    /* ================= COMANDI ================= */
+    if (interaction.isChatInputCommand()) {
+
+      /* ===== ARRESTO ===== */
+      if (interaction.commandName === "arresto") {
+
+        const nome = interaction.options.getString("nome");
+        const nascita = interaction.options.getString("nascita");
+        const reati = interaction.options.getString("reati");
+        const mesi = interaction.options.getInteger("mesi");
+        const multa = interaction.options.getInteger("multa");
+        const sequestrati = interaction.options.getString("sequestrati");
+        const consegnati = interaction.options.getString("consegnati");
+        const foto = interaction.options.getAttachment("foto");
+
+        const db = loadDB();
+        const key = getKey(nome, nascita);
+        const persona = getPersona(db, key);
+
+        const id = db._global.id++;
+
+        persona.arresti.push({
+          id,
+          agente: interaction.user.tag,
+          reati,
+          mesi,
+          multa,
+          sequestrati,
+          consegnati,
+          foto: foto.url
+        });
+
+        saveDB(db);
+
+        const embed = new EmbedBuilder()
+          .setTitle(`ARRESTO ID ${id}`)
+          .addFields(
+            { name: "Nome", value: nome },
+            { name: "Nascita", value: nascita },
+            { name: "Reati", value: reati },
+            { name: "Mesi", value: mesi.toString() },
+            { name: "Multa", value: multa.toString() },
+            { name: "Sequestrati", value: sequestrati },
+            { name: "Consegnati", value: consegnati }
+          )
+          .setImage(foto.url);
+
+        return interaction.reply({ embeds: [embed] });
+      }
+
+      /* ===== INFO ===== */
+      if (interaction.commandName === "info") {
+
+        const nome = interaction.options.getString("nome");
+        const nascita = interaction.options.getString("nascita");
+
+        const db = loadDB();
+        const key = getKey(nome, nascita);
+
+        if (!db[key]) {
+          return interaction.reply("Nessun dato");
+        }
+
+        const p = db[key];
+
+        let fedina = "Pulita";
+        if (p.arresti.length > 0) fedina = "Sporca";
+
+        let statoPDA = "Nessuno";
+
+        if (p.pda) {
+          const oggi = new Date();
+          const scad = new Date(p.pda.scadenza.split("/").reverse().join("-"));
+          const diff = Math.floor((scad - oggi) / (1000 * 60 * 60 * 24));
+
+          if (!p.pda.attivo) statoPDA = "Ritirato";
+          else if (diff < 0) statoPDA = "Scaduto";
+          else statoPDA = `Valido (${diff} giorni)`;
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle("INFO PERSONA")
+          .addFields(
+            { name: "Nome", value: p.nome },
+            { name: "Nascita", value: p.nascita },
+            { name: "Fedina", value: fedina },
+            { name: "Denunce", value: p.denunce.length.toString() },
+            { name: "Arresti", value: p.arresti.length.toString() },
+            { name: "PDA", value: statoPDA }
+          );
+
+        return interaction.reply({ embeds: [embed] });
+      }
+
     }
 
   } catch (err) {
@@ -238,9 +256,9 @@ const commands = [
     .addStringOption(o => o.setName("reati").setDescription("Reati").setRequired(true))
     .addIntegerOption(o => o.setName("mesi").setDescription("Mesi").setRequired(true))
     .addIntegerOption(o => o.setName("multa").setDescription("Multa").setRequired(true))
-    .addStringOption(o => o.setName("sequestrati").setDescription("Oggetti sequestrati"))
-    .addStringOption(o => o.setName("consegnati").setDescription("Oggetti consegnati"))
-    .addStringOption(o => o.setName("foto").setDescription("Link foto")),
+    .addStringOption(o => o.setName("sequestrati").setDescription("Oggetti sequestrati").setRequired(true))
+    .addStringOption(o => o.setName("consegnati").setDescription("Oggetti consegnati").setRequired(true))
+    .addAttachmentOption(o => o.setName("foto").setDescription("Foto").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("info")
@@ -271,7 +289,7 @@ client.once("clientReady", async () => {
   const row = new ActionRowBuilder().addComponents(button);
 
   channel.send({
-    content: "Clicca per fare una denuncia",
+    content: "Premi per fare una denuncia",
     components: [row]
   });
 });
