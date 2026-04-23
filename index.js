@@ -190,7 +190,7 @@ client.on('interactionCreate', async interaction => {
         .setCustomId('denuncia')
         .setLabel('Fai denuncia')
         .setStyle(ButtonStyle.Danger)
-        .setEmoji('🚨')
+        .setEmoji('📃')
     );
 
     return interaction.reply({ content: "Clicca sotto", components: [row] });
